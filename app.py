@@ -1,8 +1,8 @@
-from flask import Flask, request, send_file, render_template
+from flask import Flask, request, send_file, render_template, make_response
 from werkzeug.utils import secure_filename
 import os
-import re
 import zipfile
+import re
 
 app = Flask(__name__)
 
@@ -15,57 +15,40 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def convert_and_download(files):
-    converted_files = []
+    zip_buffer = zipfile.ZipFile('converted_files.zip', 'w')
     for file in files:
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
-            input_file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(input_file_path)
             output_filename = f"{os.path.splitext(filename)[0]}_formato.txt"
-            output_file_path = os.path.join(app.config['UPLOAD_FOLDER'], output_filename)
-            convert_file(input_file_path, output_file_path)
-            converted_files.append(output_file_path)
+            file_contents = convert_file(file)
+            zip_buffer.writestr(output_filename, file_contents)
         else:
             return "Error: los archivos deben tener extensión .txt."
-    return converted_files
+    zip_buffer.close()
+    return send_file('converted_files.zip', as_attachment=True)
 
-def convert_file(input_file_path, output_file_path):
-    with open(input_file_path, 'r') as file:
-        lines = file.readlines()
-        converted_data = []
-        for line in lines:
-            match = re.search(r'\d+(?=[^\d]*$)', line)
-            if match:
-                quantity = match.group(0)
-            else:
-                quantity = "No se encontró cantidad"
-            barcode = line[:13]
-            # Extraer solo letras para la descripción y reemplazar dobles ";" con uno solo
-            description = re.sub(r'\d', '', line[13:-len(quantity)]).strip().replace(';', '').replace(' ', ' ')
-            converted_data.append(f"{barcode};{description};{quantity}\n")
-    with open(output_file_path, 'w') as output_file:
-        for line in converted_data:
-            output_file.write(line)
+def convert_file(file):
+    lines = file.read().decode('utf-8').splitlines()
+    converted_data = []
+    for line in lines:
+        match = re.search(r'\d+(?=[^\d]*$)', line)
+        if match:
+            quantity = match.group(0)
+        else:
+            quantity = "No se encontró cantidad"
+        barcode = line[:13].strip()
+        description = re.sub(r'\d', '', line[13:-len(quantity)]).strip().replace(';', ' ').replace('  ', ' ').strip()
+        converted_data.append(f"{barcode};{description};{quantity}")
+    return '\n'.join(converted_data)
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
-        if 'file' not in request.files:
-            return "No se han cargado archivos."
-
         files = request.files.getlist('file')
-        converted_files = convert_and_download(files)
-
-        if isinstance(converted_files, list) and converted_files:
-            zip_filename = 'converted_files.zip'
-            with zipfile.ZipFile(zip_filename, 'w') as zip_file:
-                for converted_file in converted_files:
-                    zip_file.write(converted_file, os.path.basename(converted_file))
-            return send_file(zip_filename, as_attachment=True)
-        else:
-            return converted_files
-
+        if len(files) == 0:
+            return "No se seleccionaron archivos."
+        return convert_and_download(files)
     return render_template('index.html')
 
 if __name__ == '__main__':
-    app.run(debug=True, port=3500)
+    app.run(host='0.0.0.0', port=3500)
