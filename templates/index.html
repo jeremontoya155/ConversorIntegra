@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Converter</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title">File Converter</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="uploadForm" enctype="multipart/form-data">
+                            <div class="form-group">
+                                <label for="file">Seleccionar archivos de entrada (.txt)</label>
+                                <input type="file" class="form-control-file" id="file" name="file" multiple>
+                            </div>
+                            <button type="button" class="btn btn-primary" onclick="convertAndDownload()">Convertir</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function convertAndDownload() {
+            var form = document.getElementById('uploadForm');
+            var formData = new FormData(form);
+            
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '/', true);
+            xhr.responseType = 'blob';
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    var contentDisposition = xhr.getResponseHeader('Content-Disposition');
+                    var fileNameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                    var matches = fileNameRegex.exec(contentDisposition);
+                    var filename = matches != null && matches[1] ? matches[1].replace(/['"]/g, '') : 'converted_file.txt';
+                    var blob = new Blob([xhr.response], { type: 'application/octet-stream' });
+                    var url = window.URL.createObjectURL(blob);
+                    var a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                }
+            };
+            xhr.send(formData);
+        }
+    </script>
+</body>
+</html>
